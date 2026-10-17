@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using TraningCenter.Data;
-using TraningCenter.Entity;
 
 //build configuration
 IConfiguration configuration = new ConfigurationBuilder()
@@ -42,13 +41,157 @@ try {
     Console.WriteLine("Error be as: {0}", ex.Message);
 }
 
-ShowInfoBESTWAY(context);
+PaginationBestWay(context,1,5);
+
+static void PaginationBestWay(AppDbContext context,int pageNumber, int pageSize){
+    try
+    {
+        var query = context.Students
+            .OrderBy(std => std.StudentId)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize);
+
+        var result = query.ToList();
+
+        Console.WriteLine("Page #{0} Data: ", pageNumber);
+        foreach (var res in result){
+            Console.WriteLine("Student Name: {0} {1} Id: {2}",res.FirstName, res.LastName, res.StudentId);
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+
+static void PriceGraterThanCourseAVG(AppDbContext context) {
+    try {
+        var query = context.Courses
+           .Where(ces => ces.Price > context.Courses.Average(cs => cs.Price)) // sub query that be matched performance optimization
+           .OrderBy(c => c.Price);
+        var result = query.ToList();
+        
+        foreach (var res in result) {
+            Console.WriteLine("Course #{0} Price: {1} Course Name: {2}",res.CourseId, res.Price, res.Title);
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+
+static void ShowStudentEnrollment(AppDbContext context) {
+    try {
+        //Inner join - SelectMany: show one collection of data rather than collection of collection where
+        //in this way we avoid return unnecessary data that un used to hold memory management and performace
+        var query = context.Students.SelectMany(
+            std => std.Enrollment,//std.Enrollment: this way called : navigational property
+            (std, enrt) => new {
+                std.StudentId,
+                StudentName = std.FirstName + " " + std.LastName,
+                enrt.EnrollmentId,
+                enrt.CourseId
+            }
+        ).OrderBy(std => std.StudentId);
+
+        var result = query.ToList();
+
+        foreach (var res in result) {
+            Console.WriteLine("student #{0} name: {1} Enrollment Id: {2} Course Id: {3}\n", res.StudentId, res.StudentName, res.EnrollmentId, res.CourseId);
+        }
+    }
+    catch (Exception ex) {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+static void ShowStudentWithProjectInfo(AppDbContext context) {
+    try {
+        //we use left join when we want to show optional data
+        //we build new table like student profile we want to handle optional-data
+        var query =
+            from std in context.Students
+            join profile in context.StudentProfiles
+            on std.StudentId equals profile.StudentId
+            into ProfileGroupData // it will hold matched data into group called -> ProfileGroupData
+            from p in ProfileGroupData.DefaultIfEmpty() // if there exist data it will return it if not it will return null
+            select new {
+                std.StudentId,
+                StudentName = std.FirstName + " " + std.LastName,
+                City = p.City != null ? p.City : "no city is added",
+                County = p.Country != null ? p.Country : "no country is added"
+            };
+
+        var result = query.OrderBy(std => std.StudentId);
+
+        foreach (var res in result) {
+            Console.WriteLine("student #{0} name: {1} city: {2}", res.StudentId, res.StudentName, res.City,res.County);
+        }
+    }
+    catch (Exception ex) {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+static void ShowInstructorOFCourses(AppDbContext context) {
+
+    try {
+        //Inner Join Way [ beter than way from include to show specific data ]
+        //Inner join between courses and instructors
+
+        var query = context.Courses.Join(
+            context.Instructors,
+            course => course.InstructorId,
+            instrcutor => instrcutor.InstructorId,//Don't do course.CourseId == instructor.InstructorId
+            (course, instrcutor) => new {
+                course.Title,
+                course.Code,
+                InstrcutorFullName = instrcutor.FirstName + " " + instrcutor.LastName
+            }).OrderBy(cse => cse.Title);
+
+        var result = query.ToList();
+
+        foreach (var res in result){
+            Console.WriteLine("Course: {0} instructor name: {1} code: {2}",res.Title,res.InstrcutorFullName, res.Code);
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+static void ShowCoursesOFStudent(AppDbContext context){
+    try {
+
+        var query = context.Students
+            .Include(std => std.Enrollment)
+            .ThenInclude(crs => crs.Course)
+            .OrderBy(res => res.StudentId); 
+
+        var students = query.ToList();
+
+        foreach (var std in students) {
+            Console.WriteLine("\n\nName: {1} {2} - Student ID: {0}",std.StudentId, std.FirstName, std.LastName);
+            foreach (var ent in std.Enrollment) {
+                Console.WriteLine("Course: {0} - Course Status: {1} - Progress Percent: {2}%", ent.Course.Title, ent.Course.Status , ent.ProgressPercent);
+            }            
+        }
+
+
+    } catch (Exception ex){
+        Console.WriteLine(ex.Message);
+    }
+}
 
 static void ShowInfoBESTWAY(AppDbContext context)
 {
     try
     {
-        //Projection Way [ Best way to show specific data ]
+        //Projection Way [ beter than way from include to show specific data ]
         var query = context.Students.Select(std => new {
             std.FirstName,
             std.LastName,
@@ -68,7 +211,7 @@ static void ShowInfoBESTWAY(AppDbContext context)
 
 static void ShowRelatedInfo(AppDbContext context) {
     try {
-        //We want to know student name with number of enrollment courses !
+        // we use include when we want to see al columns + all data but when we want to see part of data - we want to use projection way
         var query = context.Students.Include(std => std.Enrollment); // left join
         var students = query.ToList();
         Console.WriteLine("\ncurrent status\n");
@@ -81,7 +224,6 @@ static void ShowRelatedInfo(AppDbContext context) {
         Console.WriteLine(ex.Message);
     }
 }
-
 
 static void GetStudentStatus(AppDbContext context){
     try {
@@ -115,7 +257,6 @@ static void GetStudentStatus(AppDbContext context){
     }
 }
 
-
 //be as a good way [  when you want to use count  ] rather bad way where about get all student list then do count
 static void TotalStudent(AppDbContext context) {
     try {
@@ -127,7 +268,6 @@ static void TotalStudent(AppDbContext context) {
         Console.WriteLine(ex.Message);
     }
 }
-
 
 static void IsActiveStudent(AppDbContext context) {
     try
@@ -296,4 +436,25 @@ static void LoggerExample(AppDbContext context){
 static void GeneratedSQLQuery(string tableName, string query){
     Console.WriteLine("\nsql query for {0}\n",tableName);
     Console.WriteLine("query be as: {0}\n",query);
+}
+
+static void ShowAll(AppDbContext context) {
+    LoggerExample(context);
+    ShowStudentInfo(context);
+    ShowCoursesOFStudent(context);
+    ShowInfoBESTWAY(context);
+    ShowRelatedInfo(context);
+    GetStudentStatus(context);
+    TotalStudent(context);
+    IsActiveStudent(context);
+    QueryChain(context);
+    ProjectionGettingData(context);
+    FindStudentByID(context);
+    GetStudentDataFirstOrDefault(context);
+    GetActiveStudent(context);
+    ShowInstructorOFCourses(context);
+    ShowStudentWithProjectInfo(context);
+    ShowAll(context);
+    ShowStudentEnrollment(context);
+    PriceGraterThanCourseAVG(context);
 }

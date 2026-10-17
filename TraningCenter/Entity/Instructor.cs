@@ -1,5 +1,5 @@
 ﻿namespace TraningCenter.Entity {
-    public partial class Instrcutor {
+    public partial class Instructor{
         public int InstructorId { get; set; }
         public string FirstName { get; set; } = null!;
         public string LastName { get; set; } = null!;
@@ -10,8 +10,8 @@
         public bool IsActive { get; set; }
 
         //Self-Reference
-        public virtual ICollection<Instrcutor> InvertManage { get; set; } = new List<Instrcutor>();
-        public virtual Instrcutor Manager { get; set; } = null!;
+        public virtual ICollection<Instructor> InvertManage { get; set; } = new List<Instructor>();
+        public virtual Instructor Manager { get; set; } = null!;
 
         public virtual ICollection<Course> Course { get; set; } = new List<Course>();
     }

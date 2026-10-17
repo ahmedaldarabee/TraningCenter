@@ -7,7 +7,7 @@ namespace TraningCenter.Data {
 
         public virtual DbSet<Course> Courses { get; set; }
         public virtual DbSet<Enrollment> Enrollments { get; set; }
-        public virtual DbSet<Instrcutor> Instrcutors { get; set; }
+        public virtual DbSet<Instructor> Instructors { get; set; }
         public virtual DbSet<Student> Students { get; set; }
         public virtual DbSet<StudentProfile> StudentProfiles { get; set; }
 
@@ -58,7 +58,7 @@ namespace TraningCenter.Data {
                 entity.HasOne(d => d.Student).WithMany(p => p.Enrollment).HasForeignKey(d => d.StudentId).HasConstraintName("FK_Enrollments_Students");
             });
 
-            modelBuilder.Entity<Instrcutor>(entity =>{
+            modelBuilder.Entity<Instructor>(entity =>{
                 // Self-reference manager relationship
                 entity.HasKey(e => e.InstructorId);
                 entity.HasIndex(e => e.ManagerId, "IX_Instructors_ManagerId");

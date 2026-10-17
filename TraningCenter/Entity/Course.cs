@@ -16,6 +16,6 @@
         public virtual ICollection<Enrollment> Enrollment { get; set; } = new List <Enrollment>();
         
         public int InstructorId { get; set; } //FK
-        public virtual Instrcutor Instrcutor {get;set;} = null!;
+        public virtual Instructor Instrcutor {get;set;} = null!;
     }
 }

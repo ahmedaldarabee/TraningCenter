@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using TraningCenter.Data;
+using TraningCenter.Entity;
+using TraningCenter.Entity.DTOs;
+using EFCore.BulkExtensions;
 
 //build configuration
 IConfiguration configuration = new ConfigurationBuilder()
@@ -19,17 +22,25 @@ if (string.IsNullOrWhiteSpace(connectionString)){
 }
 
 //configuration of EF Core now...
+//.UseLazyLoadingProxies() when you want to enable lazy loading [ NOT Recommended way ]
 var options = new DbContextOptionsBuilder<AppDbContext>()
     .UseSqlServer(connectionString)
     .LogTo(Console.WriteLine,LogLevel.Information)
     .EnableSensitiveDataLogging()
     .Options;
 
+// avoid using static context around application to build enhanced and optimized performance and saving memory
 using var context = new AppDbContext(options);
+
+// This way: it will hold memory where be matched [ Short-lived DbContext ] and avoid Long-lived DbContext problem
+//builder.Services.AddDbContext<AppDbContext>(options =>
+//    options.UseSqlServer(connectionString));
 
 //test result
 
-try {
+
+try
+{
     var connectionResult = context.Database.CanConnect();
     if (connectionResult) {
         Console.WriteLine("\nConnection Sql Server has been successfully\n");
@@ -41,11 +52,186 @@ try {
     Console.WriteLine("Error be as: {0}", ex.Message);
 }
 
-PaginationBestWay(context,1,5);
+
+
+static void TransactionOperation(AppDbContext context) {
+    var transaction = context.Database.BeginTransaction();
+    try {
+
+        //var ahmed = context.Accounts.FirstOrDefault(a => a.OwnerName == "Ahmed Al-Darabee");
+        //var mohammed = context.Accounts.FirstOrDefault(a => a.OwnerName == "Mohammed Abu-Hadhoud");
+        // we want to send 100 from user ahmed into mohammed
+        //ahmed.Ammount [ we want firstly to check if have ammount then do withdraw ] as ahmed.Ammount -= 100;
+        //mohammed.Ammount += 100 then we will do  context.SaveChanges(); and  transaction.Commit();
+    }
+    catch (Exception ex) {
+        // Cancel all changes if any error that happen
+        transaction.Rollback();
+        Console.WriteLine(ex.Message);
+    }
+}
+
+
+static void InsertMediumScaleOFData(AppDbContext context) {
+    // This approach when you want to add Like 100 and more rows of data at one time into db
+    try {
+        var stdList = new List<Student>();
+        for (int i = 0; i <= 10; i++ ){
+            var stdDTO = new Student {
+                FirstName = "test",
+                LastName = "al-darabee",
+                Email = $"test{i}.info@gmail.com",
+                Status = "Active",
+                PhoneNumber = "+962-799-999-255",
+                RegisteredAt = DateTime.Now
+            };
+            stdList.Add(stdDTO); //DONT USE SAVE CHANGES WITHIN LOOP !!!
+        }
+        context.AddRange(stdList);
+        context.SaveChanges();
+        Console.WriteLine("Students added successfully");
+    }
+    catch (Exception ex) {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+static void InsertHugeScaleOFData(AppDbContext context)
+{
+    // This approach when you want to add Like 1K and K more rows of data at one time into db
+    //K: 1000
+
+    //Same idea about ExecuteUpdate when you want to do updating into huge data...
+    try {
+        var stdList = new List<Student>();
+        for (int i = 0; i <= 1000; i++) {
+            var stdDTO = new Student {
+                FirstName = "test",
+                LastName = "al-darabee",
+                Email = $"test-{i}.info@gmail.com",
+                Status = "Active",
+                PhoneNumber = "+962-799-999-255",
+                RegisteredAt = DateTime.Now
+            };
+            stdList.Add(stdDTO); //DONT USE SAVE CHANGES WITHIN LOOP !!!
+        }
+        context.BulkInsert(stdList);
+        context.SaveChanges();
+        Console.WriteLine("Students added successfully");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+static void DeleteQuery(AppDbContext context,int studentId) {
+    try {       
+        var query = context.Students.Where(std => std.StudentId == studentId);
+        var student = query.FirstOrDefault();
+        
+        if (student == null) {
+            Console.WriteLine("\nOpps, this student isn't exist!");
+            return;
+        }
+
+        context.Students.Remove(student);
+        context.SaveChanges();
+        Console.WriteLine("\nDeleted student successfully");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+static void InsertQuery(AppDbContext context) {
+    try {
+
+        //here we using Student rather than StudentDTO to fix next Error 
+        var stdDTO = new Student { 
+            FirstName = "Wesam",
+            LastName = "Al-Darabee",
+            Email = "wesam.info@gmail.com",
+            Status = "Active",
+            PhoneNumber = "+962-785266266"
+        };
+
+        bool isExist = context.Students.Any(std => std.Email == stdDTO.Email);
+
+        if (isExist){
+            Console.WriteLine("Opps, this student is exist!");
+            return;
+        }
+
+        context.Students.Add(stdDTO); //Error: stdDTO is not null here? [ That appear if objects student in context and in DTO not matched ]
+        context.SaveChanges();
+        Console.WriteLine("Insertion new student successfully - ID : {0}", stdDTO.StudentId);
+    }
+    catch (Exception ex) {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+
+static void UpdateBestQuery(AppDbContext context,StudentDTO student){
+    try {
+        var std = context.Students.FirstOrDefault(std => std.StudentId == student.StudentId);
+        //Recommended way when you want to do update essentially when you handle coming data - [ APIs ]
+        if(std == null){
+            Console.WriteLine("Sorry, this user {0} doesn't exist!",student.StudentId);
+            return;
+        }
+        std.Email = student.Email;
+        int effectedRows = context.SaveChanges();
+        if (effectedRows > 0) {
+            Console.WriteLine("Student Info of {0} is updated successfully",student.StudentId);
+        }
+        else{
+            Console.WriteLine("Sorry, there are an error about student updating! ");
+        }
+    }
+    catch (Exception ex) {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+static void UpdateQuery(AppDbContext context) {
+    try {
+        var query = context.Students.Where(std => std.StudentId == 1);
+        var student = query.FirstOrDefault();
+        if (student == null){
+            Console.WriteLine("Opps, this student doesn't exist!");
+        }
+
+        student!.FirstName = "Ahmed";
+        student.LastName = "Al Darabee";
+        int effectedRows = context.SaveChanges();
+        Console.WriteLine("Data Updated Successfully - Effected Rows: {0}", effectedRows);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+    }
+}
+
+
+static void ShowStudentInfoBestWay(AppDbContext context) {
+    try {
+        //[ Change Tracking ]
+        // we using AsNoTracking just in case [ get data - readonly ] not in update or another operations...
+        var query = context.Students.AsNoTracking().ToList();
+        foreach (var res in query){
+            Console.WriteLine("Student Name: {0} {1} Id: {2}", res.FirstName, res.LastName, res.StudentId);
+        }
+    }
+    catch (Exception ex) {
+        Console.WriteLine(ex.Message);
+    }
+}
 
 static void PaginationBestWay(AppDbContext context,int pageNumber, int pageSize){
-    try
-    {
+    try {
         var query = context.Students
             .OrderBy(std => std.StudentId)
             .Skip((pageNumber - 1) * pageSize)
@@ -58,8 +244,7 @@ static void PaginationBestWay(AppDbContext context,int pageNumber, int pageSize)
             Console.WriteLine("Student Name: {0} {1} Id: {2}",res.FirstName, res.LastName, res.StudentId);
         }
     }
-    catch (Exception ex)
-    {
+    catch (Exception ex) {
         Console.WriteLine(ex.Message);
     }
 }
@@ -457,4 +642,18 @@ static void ShowAll(AppDbContext context) {
     ShowAll(context);
     ShowStudentEnrollment(context);
     PriceGraterThanCourseAVG(context);
+    PaginationBestWay(context,1,10);
+    ShowStudentInfoBestWay(context);
+    BuildDBOperation(context);
+    TransactionOperation(context);
+}
+
+static void BuildDBOperation(AppDbContext context)
+{
+    UpdateQuery(context);
+    UpdateBestQuery(context, new StudentDTO { StudentId = 1, Email = "darabee.info@gmail.com" });
+    InsertQuery(context);
+    DeleteQuery(context, 41);
+    InsertMediumScaleOFData(context);
+    InsertHugeScaleOFData(context);
 }
